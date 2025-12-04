@@ -276,4 +276,4 @@ This is a POC assignment. For production use, consider:
 
 ## 📞 Support
 
-For issues or questions, please refer to the documentation in the `docs/` directory.
+For issues or questions, please refer to the documentation in the `docs/` directory, checking.
