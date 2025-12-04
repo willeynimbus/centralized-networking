@@ -69,7 +69,7 @@ else
       ParameterKey=HubVpcCIDR,ParameterValue=10.0.0.0/16 \
       ParameterKey=OtherSpokeCIDR,ParameterValue=10.2.0.0/16 \
     --capabilities CAPABILITY_IAM \
-    --administration-role-arn arn:aws:iam::$HUB_ACCOUNT_ID:role/AWSCloudFormationStackSetAdministration \
+    --administration-role-arn arn:aws:iam::$HUB_ACCOUNT_ID:role/AWSCloudFormationStackSetAdministrationRole \
     --execution-role-name AWSCloudFormationStackSetExecutionRole \
     --region $REGION
   
@@ -123,7 +123,7 @@ else
       ParameterKey=HubVpcCIDR,ParameterValue=10.0.0.0/16 \
       ParameterKey=OtherSpokeCIDR,ParameterValue=10.1.0.0/16 \
     --capabilities CAPABILITY_IAM \
-    --administration-role-arn arn:aws:iam::$HUB_ACCOUNT_ID:role/AWSCloudFormationStackSetAdministration \
+    --administration-role-arn arn:aws:iam::$HUB_ACCOUNT_ID:role/AWSCloudFormationStackSetAdministrationRole \
     --execution-role-name AWSCloudFormationStackSetExecutionRole \
     --region $REGION
   

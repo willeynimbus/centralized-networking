@@ -31,7 +31,7 @@ Resources:
   StackSetAdministrationRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: AWSCloudFormationStackSetAdministration
+      RoleName: AWSCloudFormationStackSetAdministrationRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -119,7 +119,7 @@ Outputs:
               Statement:
                 - Effect: Allow
                   Principal:
-                    AWS: !Sub 'arn:aws:iam::${HubAccountId}:role/AWSCloudFormationStackSetAdministration'
+                    AWS: !Sub 'arn:aws:iam::${HubAccountId}:role/AWSCloudFormationStackSetAdministrationRole'
                   Action: sts:AssumeRole
             ManagedPolicyArns:
               - arn:aws:iam::aws:policy/AdministratorAccess
