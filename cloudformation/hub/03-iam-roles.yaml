@@ -1,5 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'IAM roles for CloudFormation StackSets cross-account deployment'
+# Updated: 2025-12-04 - Fixed role names to match AWS standards
 
 Parameters:
   SpokeAccountAId:
