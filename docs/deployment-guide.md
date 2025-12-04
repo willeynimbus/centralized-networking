@@ -220,7 +220,7 @@ aws cloudformation create-stack-set \
     ParameterKey=HubVpcCIDR,ParameterValue=10.0.0.0/16 \
     ParameterKey=OtherSpokeCIDR,ParameterValue=10.2.0.0/16 \
   --capabilities CAPABILITY_IAM \
-  --administration-role-arn arn:aws:iam::123456789012:role/AWSCloudFormationStackSetAdministrationRole \
+  --administration-role-arn arn:aws:iam::123456789012:role/AWSCloudFormationStackSetAdministration \
   --execution-role-name AWSCloudFormationStackSetExecutionRole \
   --region us-east-1
 

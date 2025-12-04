@@ -194,7 +194,7 @@ graph LR
 
 ### Role Definitions
 
-**1. AWSCloudFormationStackSetAdministrationRole (Hub Account)**
+**1. AWSCloudFormationStackSetAdministration (Hub Account)**
 - Assumed by: CloudFormation service
 - Purpose: Manage StackSets and assume execution roles in spoke accounts
 - Permissions: AdministratorAccess (can be scoped down for production)
