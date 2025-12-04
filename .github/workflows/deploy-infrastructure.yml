@@ -1,0 +1,281 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'cloudformation/**/*.yaml'
+      - 'cloudformation/**/*.yml'
+      - '.github/workflows/deploy-infrastructure.yml'
+  workflow_dispatch:
+    inputs:
+      deploy_hub:
+        description: 'Deploy Hub Account Infrastructure'
+        required: false
+        default: 'true'
+        type: boolean
+      deploy_spokes:
+        description: 'Deploy Spoke Account Infrastructure via StackSets'
+        required: false
+        default: 'true'
+        type: boolean
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  HUB_ACCOUNT_ID: ${{ secrets.HUB_ACCOUNT_ID }}
+  SPOKE_A_ACCOUNT_ID: ${{ secrets.SPOKE_A_ACCOUNT_ID }}
+  SPOKE_B_ACCOUNT_ID: ${{ secrets.SPOKE_B_ACCOUNT_ID }}
+
+jobs:
+  deploy-hub:
+    name: Deploy Hub Account Infrastructure
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || inputs.deploy_hub == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-HubDeployment
+
+      - name: Deploy IAM Roles Stack
+        id: deploy-iam
+        run: |
+          echo "Deploying IAM Roles stack..."
+          aws cloudformation deploy \
+            --template-file cloudformation/hub/03-iam-roles.yaml \
+            --stack-name hub-iam-roles \
+            --parameter-overrides \
+              SpokeAccountAId=${{ env.SPOKE_A_ACCOUNT_ID }} \
+              SpokeAccountBId=${{ env.SPOKE_B_ACCOUNT_ID }} \
+              GitHubOrg=${{ github.repository_owner }} \
+              GitHubRepo=${{ github.event.repository.name }} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --region ${{ env.AWS_REGION }} \
+            --no-fail-on-empty-changeset
+          
+          echo "✅ IAM Roles stack deployed successfully"
+
+      - name: Deploy Hub VPC Stack
+        id: deploy-vpc
+        run: |
+          echo "Deploying Hub VPC stack..."
+          aws cloudformation deploy \
+            --template-file cloudformation/hub/01-vpc.yaml \
+            --stack-name hub-vpc \
+            --parameter-overrides \
+              EnvironmentName=Hub \
+              VpcCIDR=10.0.0.0/16 \
+              PublicSubnet1CIDR=10.0.1.0/24 \
+              PublicSubnet2CIDR=10.0.2.0/24 \
+              PrivateSubnet1CIDR=10.0.11.0/24 \
+              PrivateSubnet2CIDR=10.0.12.0/24 \
+            --region ${{ env.AWS_REGION }} \
+            --no-fail-on-empty-changeset
+          
+          echo "✅ Hub VPC stack deployed successfully"
+
+      - name: Deploy Transit Gateway Stack
+        id: deploy-tgw
+        run: |
+          echo "Deploying Transit Gateway stack..."
+          aws cloudformation deploy \
+            --template-file cloudformation/hub/02-transit-gateway.yaml \
+            --stack-name hub-transit-gateway \
+            --parameter-overrides \
+              EnvironmentName=Hub \
+              TransitGatewayDescription="Central Transit Gateway for multi-account networking" \
+            --region ${{ env.AWS_REGION }} \
+            --no-fail-on-empty-changeset
+          
+          echo "✅ Transit Gateway stack deployed successfully"
+
+      - name: Get Transit Gateway ID
+        id: get-tgw-id
+        run: |
+          TGW_ID=$(aws cloudformation describe-stacks \
+            --stack-name hub-transit-gateway \
+            --query 'Stacks[0].Outputs[?OutputKey==`TransitGatewayId`].OutputValue' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          echo "tgw_id=$TGW_ID" >> $GITHUB_OUTPUT
+          echo "Transit Gateway ID: $TGW_ID"
+
+      - name: Hub Deployment Summary
+        if: success()
+        run: |
+          echo "🎉 Hub Account Infrastructure Deployed Successfully!"
+          echo "=================================================="
+          echo "Region: ${{ env.AWS_REGION }}"
+          echo "Transit Gateway ID: ${{ steps.get-tgw-id.outputs.tgw_id }}"
+          echo ""
+          echo "Next Steps:"
+          echo "1. Ensure StackSet Execution Roles are deployed in spoke accounts"
+          echo "2. StackSets will be deployed in the next job"
+
+    outputs:
+      tgw_id: ${{ steps.get-tgw-id.outputs.tgw_id }}
+
+  deploy-spokes:
+    name: Deploy Spoke Account Infrastructure via StackSets
+    runs-on: ubuntu-latest
+    needs: deploy-hub
+    if: |
+      always() && 
+      (needs.deploy-hub.result == 'success' || needs.deploy-hub.result == 'skipped') &&
+      (github.event_name == 'push' || inputs.deploy_spokes == 'true')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-StackSetDeployment
+
+      - name: Get Transit Gateway ID
+        id: get-tgw-id
+        run: |
+          TGW_ID=$(aws cloudformation describe-stacks \
+            --stack-name hub-transit-gateway \
+            --query 'Stacks[0].Outputs[?OutputKey==`TransitGatewayId`].OutputValue' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          echo "tgw_id=$TGW_ID" >> $GITHUB_OUTPUT
+          echo "Transit Gateway ID: $TGW_ID"
+
+      - name: Deploy Spoke A VPC via StackSet
+        id: deploy-spoke-a
+        run: |
+          echo "Deploying Spoke A VPC via StackSet..."
+          
+          # Check if StackSet exists
+          if aws cloudformation describe-stack-set \
+            --stack-set-name spoke-a-vpc \
+            --region ${{ env.AWS_REGION }} 2>/dev/null; then
+            echo "StackSet exists, updating..."
+            aws cloudformation update-stack-set \
+              --stack-set-name spoke-a-vpc \
+              --template-body file://cloudformation/spoke/vpc.yaml \
+              --parameters \
+                ParameterKey=EnvironmentName,ParameterValue=SpokeA \
+                ParameterKey=VpcCIDR,ParameterValue=10.1.0.0/16 \
+                ParameterKey=PublicSubnetCIDR,ParameterValue=10.1.1.0/24 \
+                ParameterKey=PrivateSubnetCIDR,ParameterValue=10.1.11.0/24 \
+                ParameterKey=TransitGatewayId,ParameterValue=${{ steps.get-tgw-id.outputs.tgw_id }} \
+                ParameterKey=HubVpcCIDR,ParameterValue=10.0.0.0/16 \
+                ParameterKey=OtherSpokeCIDR,ParameterValue=10.2.0.0/16 \
+              --capabilities CAPABILITY_IAM \
+              --region ${{ env.AWS_REGION }} \
+              --operation-preferences \
+                FailureToleranceCount=0,MaxConcurrentCount=1 \
+              --accounts ${{ env.SPOKE_A_ACCOUNT_ID }} \
+              --regions ${{ env.AWS_REGION }}
+          else
+            echo "Creating new StackSet..."
+            aws cloudformation create-stack-set \
+              --stack-set-name spoke-a-vpc \
+              --template-body file://cloudformation/spoke/vpc.yaml \
+              --parameters \
+                ParameterKey=EnvironmentName,ParameterValue=SpokeA \
+                ParameterKey=VpcCIDR,ParameterValue=10.1.0.0/16 \
+                ParameterKey=PublicSubnetCIDR,ParameterValue=10.1.1.0/24 \
+                ParameterKey=PrivateSubnetCIDR,ParameterValue=10.1.11.0/24 \
+                ParameterKey=TransitGatewayId,ParameterValue=${{ steps.get-tgw-id.outputs.tgw_id }} \
+                ParameterKey=HubVpcCIDR,ParameterValue=10.0.0.0/16 \
+                ParameterKey=OtherSpokeCIDR,ParameterValue=10.2.0.0/16 \
+              --capabilities CAPABILITY_IAM \
+              --administration-role-arn arn:aws:iam::${{ env.HUB_ACCOUNT_ID }}:role/AWSCloudFormationStackSetAdministrationRole \
+              --execution-role-name AWSCloudFormationStackSetExecutionRole \
+              --region ${{ env.AWS_REGION }}
+            
+            # Create stack instances
+            aws cloudformation create-stack-instances \
+              --stack-set-name spoke-a-vpc \
+              --accounts ${{ env.SPOKE_A_ACCOUNT_ID }} \
+              --regions ${{ env.AWS_REGION }} \
+              --operation-preferences \
+                FailureToleranceCount=0,MaxConcurrentCount=1
+          fi
+          
+          echo "✅ Spoke A VPC StackSet deployed"
+
+      - name: Deploy Spoke B VPC via StackSet
+        id: deploy-spoke-b
+        run: |
+          echo "Deploying Spoke B VPC via StackSet..."
+          
+          # Check if StackSet exists
+          if aws cloudformation describe-stack-set \
+            --stack-set-name spoke-b-vpc \
+            --region ${{ env.AWS_REGION }} 2>/dev/null; then
+            echo "StackSet exists, updating..."
+            aws cloudformation update-stack-set \
+              --stack-set-name spoke-b-vpc \
+              --template-body file://cloudformation/spoke/vpc.yaml \
+              --parameters \
+                ParameterKey=EnvironmentName,ParameterValue=SpokeB \
+                ParameterKey=VpcCIDR,ParameterValue=10.2.0.0/16 \
+                ParameterKey=PublicSubnetCIDR,ParameterValue=10.2.1.0/24 \
+                ParameterKey=PrivateSubnetCIDR,ParameterValue=10.2.11.0/24 \
+                ParameterKey=TransitGatewayId,ParameterValue=${{ steps.get-tgw-id.outputs.tgw_id }} \
+                ParameterKey=HubVpcCIDR,ParameterValue=10.0.0.0/16 \
+                ParameterKey=OtherSpokeCIDR,ParameterValue=10.1.0.0/16 \
+              --capabilities CAPABILITY_IAM \
+              --region ${{ env.AWS_REGION }} \
+              --operation-preferences \
+                FailureToleranceCount=0,MaxConcurrentCount=1 \
+              --accounts ${{ env.SPOKE_B_ACCOUNT_ID }} \
+              --regions ${{ env.AWS_REGION }}
+          else
+            echo "Creating new StackSet..."
+            aws cloudformation create-stack-set \
+              --stack-set-name spoke-b-vpc \
+              --template-body file://cloudformation/spoke/vpc.yaml \
+              --parameters \
+                ParameterKey=EnvironmentName,ParameterValue=SpokeB \
+                ParameterKey=VpcCIDR,ParameterValue=10.2.0.0/16 \
+                ParameterKey=PublicSubnetCIDR,ParameterValue=10.2.1.0/24 \
+                ParameterKey=PrivateSubnetCIDR,ParameterValue=10.2.11.0/24 \
+                ParameterKey=TransitGatewayId,ParameterValue=${{ steps.get-tgw-id.outputs.tgw_id }} \
+                ParameterKey=HubVpcCIDR,ParameterValue=10.0.0.0/16 \
+                ParameterKey=OtherSpokeCIDR,ParameterValue=10.1.0.0/16 \
+              --capabilities CAPABILITY_IAM \
+              --administration-role-arn arn:aws:iam::${{ env.HUB_ACCOUNT_ID }}:role/AWSCloudFormationStackSetAdministrationRole \
+              --execution-role-name AWSCloudFormationStackSetExecutionRole \
+              --region ${{ env.AWS_REGION }}
+            
+            # Create stack instances
+            aws cloudformation create-stack-instances \
+              --stack-set-name spoke-b-vpc \
+              --accounts ${{ env.SPOKE_B_ACCOUNT_ID }} \
+              --regions ${{ env.AWS_REGION }} \
+              --operation-preferences \
+                FailureToleranceCount=0,MaxConcurrentCount=1
+          fi
+          
+          echo "✅ Spoke B VPC StackSet deployed"
+
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "🎉 Infrastructure Deployment Complete!"
+          echo "======================================"
+          echo "Hub Account: ${{ env.HUB_ACCOUNT_ID }}"
+          echo "Spoke A Account: ${{ env.SPOKE_A_ACCOUNT_ID }}"
+          echo "Spoke B Account: ${{ env.SPOKE_B_ACCOUNT_ID }}"
+          echo "Region: ${{ env.AWS_REGION }}"
+          echo "Transit Gateway: ${{ steps.get-tgw-id.outputs.tgw_id }}"
+          echo ""
+          echo "Next Steps:"
+          echo "1. Deploy test EC2 instances for connectivity verification"
+          echo "2. Run connectivity tests between spokes"

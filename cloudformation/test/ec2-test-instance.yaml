@@ -1,0 +1,147 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Test EC2 instance for connectivity verification'
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name prefix for resources
+    Type: String
+  
+  VpcId:
+    Description: VPC ID where instance will be deployed
+    Type: AWS::EC2::VPC::Id
+  
+  SubnetId:
+    Description: Subnet ID where instance will be deployed
+    Type: AWS::EC2::Subnet::Id
+  
+  LatestAmiId:
+    Description: Latest Amazon Linux 2 AMI ID
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+  # Security Group
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvironmentName}-Test-Instance-SG
+      GroupDescription: Security group for test EC2 instance
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        # Allow ICMP (ping) from all VPCs
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.0/8
+          Description: Allow ICMP from all internal VPCs
+        # Allow SSH from VPC
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/8
+          Description: Allow SSH from internal VPCs
+      SecurityGroupEgress:
+        # Allow all outbound traffic
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-Test-Instance-SG
+
+  # IAM Role for SSM Session Manager
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-Test-Instance-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-Test-Instance-Role
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${EnvironmentName}-Test-Instance-Profile
+      Roles:
+        - !Ref InstanceRole
+
+  # EC2 Instance
+  TestInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y amazon-ssm-agent
+          systemctl enable amazon-ssm-agent
+          systemctl start amazon-ssm-agent
+          
+          # Install networking tools
+          yum install -y tcpdump traceroute telnet nc
+          
+          # Create a test script
+          cat > /home/ec2-user/test-connectivity.sh << 'EOF'
+          #!/bin/bash
+          echo "=== Connectivity Test Script ==="
+          echo "Testing from ${EnvironmentName}"
+          echo ""
+          
+          # Test Hub VPC
+          echo "Testing Hub VPC (10.0.0.0/16)..."
+          ping -c 3 10.0.11.10 2>/dev/null && echo "✓ Hub reachable" || echo "✗ Hub unreachable"
+          echo ""
+          
+          # Test Spoke A
+          echo "Testing Spoke A VPC (10.1.0.0/16)..."
+          ping -c 3 10.1.11.10 2>/dev/null && echo "✓ Spoke A reachable" || echo "✗ Spoke A unreachable"
+          echo ""
+          
+          # Test Spoke B
+          echo "Testing Spoke B VPC (10.2.0.0/16)..."
+          ping -c 3 10.2.11.10 2>/dev/null && echo "✓ Spoke B reachable" || echo "✗ Spoke B unreachable"
+          echo ""
+          
+          echo "=== Route Table ==="
+          ip route
+          EOF
+          
+          chmod +x /home/ec2-user/test-connectivity.sh
+          chown ec2-user:ec2-user /home/ec2-user/test-connectivity.sh
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-Test-Instance
+
+Outputs:
+  InstanceId:
+    Description: Test Instance ID
+    Value: !Ref TestInstance
+    Export:
+      Name: !Sub ${EnvironmentName}-Test-Instance-ID
+
+  InstancePrivateIp:
+    Description: Private IP address of test instance
+    Value: !GetAtt TestInstance.PrivateIp
+    Export:
+      Name: !Sub ${EnvironmentName}-Test-Instance-PrivateIP
+
+  SecurityGroupId:
+    Description: Security Group ID
+    Value: !Ref InstanceSecurityGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-Test-Instance-SG-ID

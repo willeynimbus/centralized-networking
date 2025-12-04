@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'StackSet Execution Role for Spoke Accounts'
+
+Parameters:
+  HubAccountId:
+    Description: AWS Account ID of the Hub Account
+    Type: String
+    AllowedPattern: '^\d{12}$'
+    ConstraintDescription: Must be a valid 12-digit AWS Account ID
+
+Resources:
+  StackSetExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSCloudFormationStackSetExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${HubAccountId}:role/AWSCloudFormationStackSetAdministrationRole'
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      Tags:
+        - Key: Purpose
+          Value: StackSet Execution
+
+Outputs:
+  StackSetExecutionRoleArn:
+    Description: ARN of StackSet Execution Role
+    Value: !GetAtt StackSetExecutionRole.Arn

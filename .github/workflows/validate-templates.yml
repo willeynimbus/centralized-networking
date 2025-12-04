@@ -1,0 +1,82 @@
+name: Validate CloudFormation Templates
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'cloudformation/**/*.yaml'
+      - 'cloudformation/**/*.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'cloudformation/**/*.yaml'
+      - 'cloudformation/**/*.yml'
+
+jobs:
+  validate:
+    name: Validate Templates
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          role-session-name: GitHubActions-Validation
+
+      - name: Install cfn-lint
+        run: |
+          pip install cfn-lint
+
+      - name: Validate Hub VPC Template
+        run: |
+          echo "Validating Hub VPC template..."
+          aws cloudformation validate-template \
+            --template-body file://cloudformation/hub/01-vpc.yaml
+          cfn-lint cloudformation/hub/01-vpc.yaml
+
+      - name: Validate Transit Gateway Template
+        run: |
+          echo "Validating Transit Gateway template..."
+          aws cloudformation validate-template \
+            --template-body file://cloudformation/hub/02-transit-gateway.yaml
+          cfn-lint cloudformation/hub/02-transit-gateway.yaml
+
+      - name: Validate IAM Roles Template
+        run: |
+          echo "Validating IAM Roles template..."
+          aws cloudformation validate-template \
+            --template-body file://cloudformation/hub/03-iam-roles.yaml
+          cfn-lint cloudformation/hub/03-iam-roles.yaml
+
+      - name: Validate Spoke VPC Template
+        run: |
+          echo "Validating Spoke VPC template..."
+          aws cloudformation validate-template \
+            --template-body file://cloudformation/spoke/vpc.yaml
+          cfn-lint cloudformation/spoke/vpc.yaml
+
+      - name: Validate StackSet Execution Role Template
+        run: |
+          echo "Validating StackSet Execution Role template..."
+          aws cloudformation validate-template \
+            --template-body file://cloudformation/spoke/stackset-execution-role.yaml
+          cfn-lint cloudformation/spoke/stackset-execution-role.yaml
+
+      - name: Validate Test Instance Template
+        run: |
+          echo "Validating Test Instance template..."
+          aws cloudformation validate-template \
+            --template-body file://cloudformation/test/ec2-test-instance.yaml
+          cfn-lint cloudformation/test/ec2-test-instance.yaml
+
+      - name: Validation Summary
+        if: success()
+        run: |
+          echo "✅ All CloudFormation templates validated successfully!"

@@ -1,0 +1,53 @@
+# Centralized Networking - Git Ignore
+
+# AWS Credentials
+*.pem
+*.key
+config.env
+credentials
+config.env.example
+# CloudFormation outputs
+outputs/
+*.json
+
+# Terraform (if used later)
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+
+# Node
+node_modules/
+npm-debug.log
+
+# Documentation builds
+docs/_build/
+site/
