@@ -2,6 +2,8 @@
 
 A production-ready implementation of centralized networking architecture across a multi-account AWS environment using Transit Gateway, CloudFormation StackSets, and GitHub Actions automation.
 
+<!-- Updated: 2025-12-05 - IAM roles managed manually -->
+
 ## 🏗️ Architecture Overview
 
 This POC demonstrates a hub-and-spoke network topology with:
