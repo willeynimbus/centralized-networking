@@ -88,24 +88,7 @@ Resources:
         - Key: Type
           Value: Private
 
-  # NAT Gateway
-  NatGatewayEIP:
-    Type: AWS::EC2::EIP
-    DependsOn: InternetGatewayAttachment
-    Properties:
-      Domain: vpc
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName}-NAT-Gateway-EIP
-
-  NatGateway:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt NatGatewayEIP.AllocationId
-      SubnetId: !Ref PublicSubnet
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName}-NAT-Gateway
+  # NAT Gateway removed - private subnets use Transit Gateway only
 
   # Public Route Table
   PublicRouteTable:
@@ -139,12 +122,8 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-Private-Routes
 
-  DefaultPrivateRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway
+  # Default route removed - private subnets only route via Transit Gateway
+  # No internet access from private subnets
 
   PrivateSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
