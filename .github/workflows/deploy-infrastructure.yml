@@ -33,6 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || inputs.deploy_hub == 'true'
     
+    permissions:
+      id-token: write
+      contents: read
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -130,6 +134,10 @@ jobs:
       always() && 
       (needs.deploy-hub.result == 'success' || needs.deploy-hub.result == 'skipped') &&
       (github.event_name == 'push' || inputs.deploy_spokes == 'true')
+    
+    permissions:
+      id-token: write
+      contents: read
     
     steps:
       - name: Checkout code
