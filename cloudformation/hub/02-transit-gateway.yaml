@@ -20,8 +20,8 @@ Resources:
       AmazonSideAsn: 64512
       Description: !Ref TransitGatewayDescription
       AutoAcceptSharedAttachments: enable
-      DefaultRouteTableAssociation: disable
-      DefaultRouteTablePropagation: disable
+      DefaultRouteTableAssociation: enable
+      DefaultRouteTablePropagation: enable
       DnsSupport: enable
       VpnEcmpSupport: enable
       Tags:
@@ -29,13 +29,14 @@ Resources:
           Value: !Sub ${EnvironmentName}-TGW
 
   # Transit Gateway Route Table
-  TransitGatewayRouteTable:
-    Type: AWS::EC2::TransitGatewayRouteTable
-    Properties:
-      TransitGatewayId: !Ref TransitGateway
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName}-TGW-RouteTable
+  # Using default route table instead of custom one
+  # TransitGatewayRouteTable:
+  #   Type: AWS::EC2::TransitGatewayRouteTable
+  #   Properties:
+  #     TransitGatewayId: !Ref TransitGateway
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub ${EnvironmentName}-TGW-RouteTable
 
   # Hub VPC Attachment to Transit Gateway
   HubVPCAttachment:
@@ -53,19 +54,16 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-VPC-TGW-Attachment
 
-  # Associate Hub VPC with TGW Route Table
-  HubVPCRouteTableAssociation:
-    Type: AWS::EC2::TransitGatewayRouteTableAssociation
-    Properties:
-      TransitGatewayAttachmentId: !Ref HubVPCAttachment
-      TransitGatewayRouteTableId: !Ref TransitGatewayRouteTable
+  # Note: Using Transit Gateway default route table (automatic association)
+  # Custom route table association removed to avoid conflicts
 
   # Enable route propagation for Hub VPC
-  HubVPCRouteTablePropagation:
-    Type: AWS::EC2::TransitGatewayRouteTablePropagation
-    Properties:
-      TransitGatewayAttachmentId: !Ref HubVPCAttachment
-      TransitGatewayRouteTableId: !Ref TransitGatewayRouteTable
+  # Using default route table propagation (automatic)
+  # HubVPCRouteTablePropagation:
+  #   Type: AWS::EC2::TransitGatewayRouteTablePropagation
+  #   Properties:
+  #     TransitGatewayAttachmentId: !Ref HubVPCAttachment
+  #     TransitGatewayRouteTableId: !Ref TransitGatewayRouteTable
 
   # Add routes to Hub VPC private route tables pointing to TGW
   # Route for Spoke A VPC (10.1.0.0/16)
@@ -113,11 +111,12 @@ Outputs:
     Export:
       Name: !Sub ${EnvironmentName}-TGW-ID
 
-  TransitGatewayRouteTableId:
-    Description: Transit Gateway Route Table ID
-    Value: !Ref TransitGatewayRouteTable
-    Export:
-      Name: !Sub ${EnvironmentName}-TGW-RouteTable-ID
+
+  # TransitGatewayRouteTableId:
+  #   Description: Transit Gateway Route Table ID
+  #   Value: !Ref TransitGatewayRouteTable
+  #   Export:
+  #     Name: !Sub ${EnvironmentName}-TGW-RouteTable-ID
 
   HubVPCAttachmentId:
     Description: Hub VPC Transit Gateway Attachment ID
