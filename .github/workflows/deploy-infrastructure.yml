@@ -48,23 +48,24 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-HubDeployment
 
-      - name: Deploy IAM Roles Stack
-        id: deploy-iam
-        run: |
-          echo "Deploying IAM Roles stack..."
-          aws cloudformation deploy \
-            --template-file cloudformation/hub/03-iam-roles.yaml \
-            --stack-name hub-iam-roles \
-            --parameter-overrides \
-              SpokeAccountAId=${{ env.SPOKE_A_ACCOUNT_ID }} \
-              SpokeAccountBId=${{ env.SPOKE_B_ACCOUNT_ID }} \
-              GitHubOrg=${{ github.repository_owner }} \
-              GitHubRepo=${{ github.event.repository.name }} \
-            --capabilities CAPABILITY_NAMED_IAM \
-            --region ${{ env.AWS_REGION }} \
-            --no-fail-on-empty-changeset
-          
-          echo "✅ IAM Roles stack deployed successfully"
+      # Commented out - IAM roles managed manually
+      # - name: Deploy IAM Roles Stack
+      #   id: deploy-iam
+      #   run: |
+      #     echo "Deploying IAM Roles stack..."
+      #     aws cloudformation deploy \
+      #       --template-file cloudformation/hub/03-iam-roles.yaml \
+      #       --stack-name hub-iam-roles \
+      #       --parameter-overrides \
+      #         SpokeAccountAId=${{ env.SPOKE_A_ACCOUNT_ID }} \
+      #         SpokeAccountBId=${{ env.SPOKE_B_ACCOUNT_ID }} \
+      #         GitHubOrg=${{ github.repository_owner }} \
+      #         GitHubRepo=${{ github.event.repository.name }} \
+      #       --capabilities CAPABILITY_NAMED_IAM \
+      #       --region ${{ env.AWS_REGION }} \
+      #       --no-fail-on-empty-changeset
+      #     
+      #     echo "✅ IAM Roles stack deployed successfully"
 
       - name: Deploy Hub VPC Stack
         id: deploy-vpc
