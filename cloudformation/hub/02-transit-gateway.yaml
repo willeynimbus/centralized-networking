@@ -20,8 +20,8 @@ Resources:
       AmazonSideAsn: 64512
       Description: !Ref TransitGatewayDescription
       AutoAcceptSharedAttachments: enable
-      DefaultRouteTableAssociation: enable
-      DefaultRouteTablePropagation: enable
+      DefaultRouteTableAssociation: disable
+      DefaultRouteTablePropagation: disable
       DnsSupport: enable
       VpnEcmpSupport: enable
       Tags:
